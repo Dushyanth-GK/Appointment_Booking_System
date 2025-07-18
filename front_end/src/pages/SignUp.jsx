@@ -42,7 +42,7 @@ export default function SignupPage() {
     } else {
       setError('');
       setSuccess('Account created successfully!');
-      setTimeout(() => navigate('/login'), 1500); // Redirect after short delay
+      setTimeout(() => navigate('/'), 1500); // Redirect after short delay
     }
   };
 
@@ -130,7 +130,7 @@ export default function SignupPage() {
 
         <p className="mt-6 text-center text-sm text-gray-600">
           Already have an account?{' '}
-          <a href="/login" className="text-blue-600 hover:underline">
+          <a href="/" className="text-blue-600 hover:underline">
             Log in
           </a>
         </p>

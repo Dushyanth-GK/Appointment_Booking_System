@@ -11,13 +11,14 @@ export default function LoginPage() {
   const handleLogin = async (e) => {
     e.preventDefault();
 
-    const result = await login(email, password); // ✅ Call API
+    const result = await login(email, password);
 
     if (result.error) {
-      setError(result.error); // Show error from API
+      setError(result.error);
     } else {
       setError('');
-      navigate('/home'); // Redirect on success
+      localStorage.setItem('token', result.token); // ✅ Store JWT
+      navigate('/home');
     }
   };
 

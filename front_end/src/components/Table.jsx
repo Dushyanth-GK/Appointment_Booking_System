@@ -1,67 +1,126 @@
 import React, { useEffect, useState } from 'react';
-import { fetchDataByDate, bookAppointment, cancelAppointment } from '../api/api';
+import { fetchSlotsByDate, bookAppointment, cancelAppointment } from '../api/api';
+import { backendTimeToDisplay } from '../utils/timeConversion';
+import { useNavigate } from 'react-router-dom';
+import moment from 'moment'; // Ensure moment is installed and imported
 
 export default function Table({ date }) {
-  const [appointments, setAppointments] = useState([]);
+  const [slots, setSlots] = useState([]);
   const [loading, setLoading] = useState(true);
-  const currentUser = localStorage.getItem('userName');
+  const navigate = useNavigate();
+
+  // Get current user info from localStorage
+  const currentUserId = localStorage.getItem('userId');
+  const currentUserName = localStorage.getItem('userName');
   const currentDepartment = localStorage.getItem('userDepartment');
+  const token = localStorage.getItem('token');
 
-  // Fetch appointments for the selected date
+  // Redirect if not authenticated
   useEffect(() => {
-    async function loadData() {
-      setLoading(true);
-      const result = await fetchDataByDate(date);
-      if (!result.error) {
-        setAppointments(result.appointments || []);
-      }
-      setLoading(false);
+    if (!token) {
+      alert('You must be logged in to view this page.');
+      navigate('/login');
     }
-    loadData();
-  }, [date]);
+  }, [token, navigate]);
 
-  // Time slots from 08:00 AM to 06:00 PM
+  // Fixed time slots 08:00 to 18:00 backend format
   const timeSlots = Array.from({ length: 11 }, (_, i) => {
     const hour = i + 8;
-    const suffix = hour >= 12 ? "PM" : "AM";
-    const displayHour = hour % 12 === 0 ? 12 : hour % 12;
-    return `${displayHour}:00 ${suffix}`;
+    return `${hour.toString().padStart(2, '0')}:00:00`;
   });
 
-  // Book an appointment
-  const handleBook = async (startTime) => {
-    const bookingData = {
-      date,
-      startTime,
-      name: currentUser,
-      department: currentDepartment
-    };
+  useEffect(() => {
+  async function loadSlots() {
+    setLoading(true);
+    const formattedDate = moment(date).format('YYYY-MM-DD');
+    const result = await fetchSlotsByDate(formattedDate);
+
+    if (!result.error) {
+      setSlots(result);
+      console.log('Fetched slots:', result);
+
+      // Find current user's booking and store its ID
+      const currentUserName = localStorage.getItem('userName');
+      const userBooking = result.find(
+        slot => slot.booked && slot.name === currentUserName
+      );
+
+      if (userBooking && userBooking.id) {
+        localStorage.setItem('bookingId', userBooking.id); // ✅ Save booking ID
+      } else {
+        localStorage.removeItem('bookingId'); // ✅ Clear if no booking
+      }
+    } else {
+      alert(result.error);
+    }
+
+    setLoading(false);
+  }
+
+  loadSlots();
+}, [date]);
+
+  const handleBook = async (slotTime) => {
+  setLoading(true);
+
+  const bookingData = {
+    booking_date: moment(date).format('YYYY-MM-DD'),
+    slot_time: slotTime
+  };
+
+  try {
     const result = await bookAppointment(bookingData);
+
     if (!result.error) {
-      setAppointments(prev => [...prev, bookingData]);
+      const updatedSlots = await fetchSlotsByDate(moment(date).format('YYYY-MM-DD'));
+      setSlots(updatedSlots);
+
+      const userBooking = updatedSlots.find(
+        slot => slot.booked && slot.name === currentUserName
+      );
+
+      if (userBooking && userBooking.id) {
+        localStorage.setItem('bookingId', userBooking.id);
+      }
+
+      // Optionally show success message
+      // alert('Booking successful!');
     } else {
       alert(result.error);
+      console.error('Booking error:', result.error);
     }
-  };
+  } catch (err) {
+    console.error('Unexpected error:', err);
+    alert('Something went wrong while booking.');
+  }
 
-  // Cancel an appointment
-  const handleCancel = async (startTime) => {
-    const appointment = appointments.find(
-      item => item.date === date && item.startTime === startTime && item.name === currentUser
-    );
-    if (!appointment) return;
+  setLoading(false);
+};
 
-    const result = await cancelAppointment(appointment.id);
-    if (!result.error) {
-      setAppointments(prev => prev.filter(item => item.id !== appointment.id));
-    } else {
-      alert(result.error);
-    }
-  };
+ const handleCancel = async () => {
+  const bookingId = localStorage.getItem('bookingId');
+
+  if (!bookingId) {
+    return alert('No booking found to cancel.');
+  }
+
+  const result = await cancelAppointment(bookingId);
+
+  if (!result.error) {
+    const formattedDate = moment(date).format('YYYY-MM-DD');
+    const updatedSlots = await fetchSlotsByDate(formattedDate);
+    setSlots(updatedSlots);
+
+    // Clear booking ID from localStorage after successful cancellation
+    localStorage.removeItem('bookingId');
+  } else {
+    alert(result.error);
+  }
+};
 
   return (
     <div className="text-gray-800">
-      <div className="max-h-[400px] overflow-y-auto overflow-x-auto rounded-lg border border-gray-300 shadow-sm">
+      <div className="max-h-[400px] overflow-auto rounded-lg border border-gray-300 shadow-sm">
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="sticky top-0 bg-gray-100 text-center">
             <tr>
@@ -74,19 +133,19 @@ export default function Table({ date }) {
           <tbody className="divide-y divide-gray-100">
             {loading ? (
               <tr>
-                <td colSpan="4" className="text-center py-4">Loading...</td>
+                <td colSpan={4} className="text-center py-4">Loading...</td>
               </tr>
             ) : (
-              timeSlots.map((slot, index) => {
-                const appointment = appointments.find(
-                  item => item.date === date && item.startTime === slot
-                );
-                const isBooked = Boolean(appointment);
-                const isCurrentUser = appointment?.name === currentUser;
+              timeSlots.map((slot, idx) => {
+                const appointment = slots.find((s) => s.time === slot);
+                const isBooked = appointment?.booked || false;
+                const isCurrentUser = appointment?.name === currentUserName;
 
                 return (
-                  <tr key={index} className="hover:bg-gray-50 transition">
-                    <td className="px-4 py-3 whitespace-nowrap font-medium">{slot}</td>
+                  <tr key={idx} className="hover:bg-gray-50 transition">
+                    <td className="px-4 py-3 whitespace-nowrap font-medium">
+                      {backendTimeToDisplay(slot)}
+                    </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {isBooked ? appointment.name : <span className="text-gray-400">—</span>}
                     </td>

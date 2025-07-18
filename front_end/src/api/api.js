@@ -8,7 +8,7 @@ const BASE_URL = 'http://localhost:3000';
  */
 export async function login(email, password) {
   try {
-    const response = await fetch(`${BASE_URL}/login`, {
+    const response = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
@@ -30,7 +30,6 @@ export async function login(email, password) {
   } catch (error) {
     console.log('Error logging in:', error.message);
     return { error: error.message };
-    
   }
 }
 
@@ -41,7 +40,7 @@ export async function login(email, password) {
  */
 export async function signup(userData) {
   try {
-    const response = await fetch(`${BASE_URL}/signup`, {
+    const response = await fetch(`${BASE_URL}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(userData)
@@ -66,76 +65,6 @@ export function logout() {
 }
 
 /**
- * Fetch data (e.g. appointments) for a specific date
- * @param {string} date - Format: YYYY-MM-DD
- * @returns {Promise<object>} data or error
- */
-export async function fetchDataByDate(date) {
-  try {
-    const response = await fetch(`http://localhost:3000/data?date=${date}`, {
-      method: 'GET',
-      headers: getAuthHeaders()
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch data');
-    }
-
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    return { error: error.message };
-  }
-}
-
-/**
- * Book an appointment
- * @param {object} bookingData - { date, startTime, name, department }
- * @returns {Promise<object>} success or error
- */
-export async function bookAppointment(bookingData) {
-  try {
-    const response = await fetch(`http://localhost:3000/book`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(bookingData)
-    });
-
-    if (!response.ok) {
-      throw new Error('Booking failed');
-    }
-
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    return { error: error.message };
-  }
-}
-
-/**
- * Cancel an appointment
- * @param {number|string} appointmentId
- * @returns {Promise<object>} success or error
- */
-export async function cancelAppointment(appointmentId) {
-  try {
-    const response = await fetch(`http://localhost:3000/cancel/${appointmentId}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-
-    if (!response.ok) {
-      throw new Error('Cancellation failed');
-    }
-
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    return { error: error.message };
-  }
-}
-
-/**
  * Get authenticated headers
  * @returns {object} headers with Authorization
  */
@@ -145,4 +74,65 @@ export function getAuthHeaders() {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${token}`
   };
+}
+
+/**
+ * Fetch available slots for a given date
+ * @param {string} date - in YYYY-MM-DD format
+ * @returns {Promise<object>} slots or error
+ */
+export async function fetchSlotsByDate(date) {
+  try {
+    const res = await fetch(`${BASE_URL}/bookings/slots?date=${date}`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch slots');
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+/**
+ * Book an appointment
+ * @param {object} bookingData - { date, slot_time, name, department }
+ * @returns {Promise<object>} success or error
+ */
+export async function bookAppointment({ booking_date, slot_time }) {
+  try {
+    const res = await fetch(`${BASE_URL}/bookings/book`, {
+      method: 'POST',
+      headers: getAuthHeaders(), // ✅ includes JWT token
+      body: JSON.stringify({ booking_date, slot_time }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message || 'Failed to book');
+    }
+    return await res.json();
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+/**
+ * Cancel an appointment
+ * @param {string} bookingId
+ * @returns {Promise<object>} success or error
+ */
+export async function cancelAppointment(bookingId) {
+  try {
+    const res = await fetch(`${BASE_URL}/bookings/cancel/${bookingId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to cancel');
+    }
+    return await res.json();
+  } catch (err) {
+    return { error: err.message };
+  }
 }
